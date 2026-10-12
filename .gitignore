@@ -1,0 +1,13 @@
+# Only publish reviewed application files; exclude all data and tests by default.
+/*
+!/.gitignore
+!/README.md
+!/HUONG_DAN.md
+!/requirements.txt
+!/MoUngDung.bat
+!/app.py
+!/ui.py
+!/layout.py
+!/detail_layout.py
+!/printing.py
+!/storage.py
