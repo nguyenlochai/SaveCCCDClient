@@ -13,11 +13,11 @@ python app.py
 
 Hoặc nhấp đúp `MoUngDung.bat` khi máy đã có Python/Tkinter. Launcher tự cài Pillow/OpenCV nếu thiếu bằng đúng Python đang chạy (cần Internet khi cài thư viện; nhận dạng QR chạy offline).
 
-Trong vùng riêng **Quét thông tin CCCD**, bấm **Chọn ảnh** (một ảnh) hoặc **Dán ảnh**, rồi **Quét** để điền tên và CCCD từ QR. Ảnh quét chỉ là ảnh tạm, không vào danh sách ảnh khách hàng, không được lưu/in kể cả khi bấm Lưu; có thể thay hoặc xóa riêng. Không cần có ảnh đính kèm khách hàng. Kiểm tra thông tin rồi bấm Lưu; không OCR, không tự lưu và không xác thực danh tính.
+Trong vùng riêng **Quét thông tin CCCD**, bấm **Chọn ảnh** (một ảnh) hoặc **Dán ảnh**, rồi **Quét** để điền tên, CCCD và địa chỉ có trong QR. Ảnh quét chỉ là ảnh tạm, không vào danh sách ảnh khách hàng, không được lưu/in kể cả khi bấm Lưu; có thể thay hoặc xóa riêng. Không cần có ảnh đính kèm khách hàng. Kiểm tra thông tin rồi bấm Lưu; không OCR, không tự lưu và không xác thực danh tính.
 
 ## Chức năng
 
-- Tạo, sửa, xóa hồ sơ khách hàng và lưu nhiều ảnh.
+- Tạo, sửa, xóa hồ sơ khách hàng và lưu nhiều ảnh. Địa chỉ là ô tùy chọn dưới CCCD, trên Ghi chú; xem đầy đủ trong Chi tiết (xuống dòng, có thanh cuộn). Hồ sơ cũ tự được bổ sung địa chỉ trống khi mở, không mất thông tin hay ảnh.
 - Tìm theo tên có/không dấu, số điện thoại hoặc CCCD.
 - Danh sách phân trang; modal xem đầy đủ thông tin và ảnh.
 - Xem trước ảnh để in qua trình duyệt và chọn máy in trước khi xác nhận.

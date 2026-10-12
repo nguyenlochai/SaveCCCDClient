@@ -1,4 +1,4 @@
-"""Offline CCCD QR reader. Returns only name/ID; never logs QR contents."""
+"""Offline CCCD QR reader. Returns (name, ID, address); never logs QR contents."""
 import re
 from PIL import Image, ImageOps
 
@@ -14,7 +14,7 @@ def parse_payload(payload):
     name = fields[2].strip()
     if (not name or any(ord(c) < 32 for c in name)
             or (fields[1] and not re.fullmatch(r'[0-9]{9}', fields[1]))
-            or fields[4] not in ('Nam', 'Nữ') or not fields[5].strip()):
+            or fields[4] not in ('Nam', 'Nữ')):
         return None
     from datetime import datetime
     for value in (fields[3], fields[6]):
@@ -24,7 +24,7 @@ def parse_payload(payload):
             datetime.strptime(value, '%d%m%Y')
         except ValueError:
             return None
-    return name, fields[0]
+    return name, fields[0], fields[5]
 
 
 def scan_cccd(path):

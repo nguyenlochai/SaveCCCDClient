@@ -96,8 +96,8 @@ def build_app(app,root,store):
     form=tk.Frame(app.form_canvas,bg='white');window=app.form_canvas.create_window(0,0,window=form,anchor='nw')
     form.bind('<Configure>',lambda e:app.form_canvas.configure(scrollregion=app.form_canvas.bbox('all')))
     app.form_canvas.bind('<Configure>',lambda e:app.form_canvas.itemconfigure(window,width=e.width))
-    app.name,app.phone,app.cccd=tk.StringVar(),tk.StringVar(),tk.StringVar()
-    for text,var,placeholder,kind in [('Tên khách hàng *',app.name,'Nhập tên khách hàng…','user'),('Số điện thoại',app.phone,'Nhập số điện thoại…','phone'),('Số CCCD (12 chữ số)',app.cccd,'Nhập số CCCD (12 chữ số)…','id')]:
+    app.name,app.phone,app.cccd,app.address=tk.StringVar(),tk.StringVar(),tk.StringVar(),tk.StringVar()
+    for text,var,placeholder,kind in [('Tên khách hàng *',app.name,'Nhập tên khách hàng…','user'),('Số điện thoại',app.phone,'Nhập số điện thoại…','phone'),('Số CCCD (12 chữ số)',app.cccd,'Nhập số CCCD (12 chữ số)…','id'),('Địa chỉ',app.address,'Nhập địa chỉ…',None)]:
         label(form,text,bold=True).pack(anchor='w',pady=(0,5))
         field=RoundEntry(form,var,placeholder,kind);field.pack(fill='x',pady=(0,7));var.trace_add('write',app.mark_dirty)
     label(form,'Ghi chú',bold=True).pack(anchor='w',pady=(0,5))
@@ -144,9 +144,7 @@ def build_app(app,root,store):
     app.paste_photo_button.pack(side='left',padx=(0,8))
     app.delete_photo_button=RoundButton(photo_actions,'Xóa ảnh đã chọn',app.delete_photo,width=165,height=29,danger=True,icon_name='delete')
     app.delete_photo_button.pack(side='left')
-    app.paste_hint=label(form,'Win+Shift+S để chụp → Dán ảnh.\nCtrl+V khi chọn vùng ảnh / danh sách ảnh.\nBấm Lưu khách hàng để lưu ảnh.',muted=True,size=11,justify='left',anchor='w')
-    app.paste_hint.pack(fill='x',pady=(6,0))
-    app.paste_hint.bind('<Configure>',lambda e:app.paste_hint.configure(wraplength=max(1,e.width)))
+
     # No root binding: entry and notes keep their normal text paste behavior.
     for target in (app.image_chooser, app.preview, app.photos, app.paste_photo_button, app.delete_photo_button):
         target.bind('<Control-v>',app.paste_photo)

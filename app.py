@@ -32,7 +32,13 @@ class Store:
                 filename TEXT NOT NULL, original_name TEXT NOT NULL);
         ''')
 
-    def save(self, customer_id, name, phone, cccd, notes, photos=()):
+        # Keep the old column order and all existing rows/attachments intact.
+        with self.db:
+            columns = {row['name'] for row in self.db.execute('PRAGMA table_info(customers)')}
+            if 'address' not in columns:
+                self.db.execute("ALTER TABLE customers ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+
+    def save(self, customer_id, name, phone, cccd, notes, photos=(), *, address=''):
         import re
         name, cccd = name.strip(), cccd.strip()
         phone = re.sub(r'[\s.()-]', '', phone.strip())
@@ -50,11 +56,11 @@ class Store:
         copied = []
         try:
             with self.db:
-                self.db.execute('''INSERT INTO customers(id,name,phone,cccd,notes,search_text)
-                    VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+                self.db.execute('''INSERT INTO customers(id,name,phone,cccd,notes,search_text,address)
+                    VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,phone=excluded.phone,cccd=excluded.cccd,
-                    notes=excluded.notes,search_text=excluded.search_text,updated=CURRENT_TIMESTAMP''',
-                    (customer_id, name, phone, cccd, notes, normalize(f'{name} {phone} {cccd}')))
+                    notes=excluded.notes,search_text=excluded.search_text,address=excluded.address,updated=CURRENT_TIMESTAMP''',
+                    (customer_id, name, phone, cccd, notes, normalize(f'{name} {phone} {cccd}'), address))
                 for source in photos:
                     source = Path(source)
                     with Image.open(source) as image:
@@ -373,7 +379,7 @@ class App:
         self.clear_scan_photo()
         self.loading = True
         self.current_id = None
-        for variable in (self.name, self.phone, self.cccd):
+        for variable in (self.name, self.phone, self.cccd, self.address):
             variable.set('')
         self.notes.delete('1.0', 'end')
         self.notes.edit_modified(False)
@@ -394,6 +400,7 @@ class App:
         self.name.set(record['name'])
         self.phone.set(record['phone'])
         self.cccd.set(record['cccd'])
+        self.address.set(record['address'])
         self.notes.delete('1.0', 'end')
         self.notes.insert('1.0', record['notes'])
         self.notes.edit_modified(False)
@@ -404,7 +411,7 @@ class App:
 
     def save_customer(self):
         try:
-            cid = self.store.save(self.current_id, self.name.get(), self.phone.get(), self.cccd.get(), self.notes.get('1.0', 'end-1c'), self.pending)
+            cid = self.store.save(self.current_id, self.name.get(), self.phone.get(), self.cccd.get(), self.notes.get('1.0', 'end-1c'), self.pending, address=self.address.get())
         except Exception as exc:
             messagebox.showerror('Không thể lưu', str(exc), parent=self.root)
             return
@@ -620,7 +627,7 @@ class App:
         def snapshot():
             return (self._scan_revision, id(self.store), self.current_id,
                     self.scan_source, self.name.get(), self.cccd.get(),
-                    self.phone.get(), self.notes.get('1.0', 'end-1c'))
+                    self.phone.get(), self.address.get(), self.notes.get('1.0', 'end-1c'))
         before = snapshot()
         result = queue.Queue(maxsize=1)
         self._scan_busy = True
@@ -653,20 +660,23 @@ class App:
                 self.status.set('Chưa điền thông tin CCCD từ QR.')
                 messagebox.showerror('Không thể quét CCCD', error, parent=self.root)
                 return
-            name, cccd = identity
+            name, cccd, address = identity
             if ((self.name.get().strip() and self.name.get() != name)
-                    or (self.cccd.get().strip() and self.cccd.get() != cccd)):
+                    or (self.cccd.get().strip() and self.cccd.get() != cccd)
+                    or (address.strip() and self.address.get().strip() and self.address.get() != address)):
                 if not messagebox.askyesno('Thay thông tin từ QR?',
-                        'Tên hoặc CCCD hiện tại khác với QR. Thay hai ô này bằng thông tin đọc từ QR?\n'
+                        'Tên, CCCD hoặc địa chỉ hiện tại khác với QR. Thay bằng thông tin đọc từ QR?\n'
                         'Các thông tin và ảnh khác được giữ nguyên. Chưa lưu tự động.',
                         default='no', parent=self.root):
                     self.status.set('Đã hủy điền thông tin từ QR; dữ liệu giữ nguyên.')
                     return
             self.name.set(name)
             self.cccd.set(cccd)
+            if address.strip():
+                self.address.set(address)
             self.dirty = True
             self.form_canvas.yview_moveto(0)
-            self.status.set('Đã điền tên và CCCD từ QR. Kiểm tra lại rồi bấm Lưu; đây không phải xác thực danh tính.')
+            self.status.set('Đã điền thông tin từ QR (địa chỉ nếu có). Kiểm tra lại rồi bấm Lưu; đây không phải xác thực danh tính.')
         threading.Thread(target=work, daemon=True, name='local-cccd-qr').start()
         self._scan_after = self.root.after(50, poll)
 

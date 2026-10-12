@@ -6,7 +6,7 @@
 - Máy khác: cài Python 3.10+ có Tkinter, chạy `python -m pip install -r requirements.txt` rồi `python app.py`.
 
 ## Sử dụng
-1. Bấm **Tạo khách hàng mới**, nhập tên và ít nhất SĐT hoặc CCCD.
+1. Bấm **Tạo khách hàng mới**, nhập tên và ít nhất SĐT hoặc CCCD. Ô **Địa chỉ** nằm dưới CCCD, trên Ghi chú, có thể để trống; không thêm cột vào bảng danh sách.
 2. Bấm **Chọn ảnh**; có thể chọn nhiều ảnh chân dung, mặt trước / sau CCCD. Hỗ trợ JPG, PNG, WEBP, BMP.
    - **Dán ảnh chụp màn hình:** nhấn **Win+Shift+S**, khoanh vùng cần chụp, quay lại SaveCCCD rồi bấm **Dán ảnh** cạnh nút xóa ảnh. Không cần tự lưu ảnh ra tệp.
    - Hoặc nhấp vùng xem trước / danh sách ảnh (có thể dùng Tab để chọn vùng Chọn ảnh), rồi nhấn **Ctrl+V**. Ctrl+V trong ô tên, SĐT, CCCD, tìm kiếm và ghi chú vẫn dán văn bản bình thường.
@@ -26,9 +26,9 @@ CCCD phải đủ 12 chữ số, giữ nguyên số 0 đầu. Không cho tạo t
 - Dùng vùng riêng **Quét thông tin CCCD**: **Chọn ảnh** chỉ chọn một ảnh; **Dán ảnh** nhận ảnh chụp Win+Shift+S; **Quét** đọc ảnh đang xem trước. Chọn/dán lần nữa thay ảnh cũ; **Xóa ảnh quét** xóa ảnh tạm. Hủy hộp chọn giữ ảnh trước. Ctrl+V khi focus vùng quét chỉ thay ảnh quét; các ô nhập vẫn dán văn bản.
 - Vùng **Ảnh khách hàng** bên dưới hoàn toàn độc lập, vẫn chọn/dán nhiều ảnh để lưu và in. Quét không dùng ảnh đang chọn trong danh sách này, không thêm ảnh vào danh sách và hoạt động cả khi hồ sơ không có ảnh đính kèm. Ở cửa sổ thấp, cuộn form để thấy vùng quét; Lưu và Nơi lưu luôn hiện ở chân cửa sổ.
 - Ảnh quét được sao chép vào thư mục tạm riêng `SaveCCCD-scan-*`, không lưu vào hồ sơ hoặc bản in kể cả sau khi Lưu. Ảnh tạm được dọn khi thay/xóa, lưu thành công, bỏ form, chuyển khách hàng/nơi lưu thành công hoặc đóng ứng dụng; ảnh gốc trên ổ đĩa không bị xóa. Lỗi quét/lưu giữ ảnh để thử lại. Tệp bị khóa sẽ có cảnh báo và được thử dọn lại; thoát cưỡng bức/mất điện có thể để lại thư mục tạm cần dọn thủ công.
-- Khi thành công, form cuộn lên và chỉ điền **Tên khách hàng / Số CCCD**; giữ SĐT, ghi chú và các ảnh. Số 0 đầu được giữ nguyên. Nếu tên/CCCD hiện tại khác, ứng dụng hỏi trước khi thay.
+- Khi thành công, form cuộn lên và điền **Tên khách hàng / Số CCCD / Địa chỉ**; giữ SĐT, ghi chú và các ảnh. Địa chỉ giữ nguyên dấu và nội dung QR, số 0 đầu CCCD được giữ nguyên. Nếu tên/CCCD/địa chỉ hiện tại khác, ứng dụng hỏi trước khi thay. QR có trường địa chỉ trống không xóa địa chỉ đang nhập và không tự suy đoán địa chỉ.
 - Kiểm tra lại rồi bấm **Lưu khách hàng**: quét không tự lưu, không xác thực danh tính. Nếu đổi ảnh/hồ sơ hoặc sửa form trong lúc quét, kết quả cũ bị bỏ.
-- Chỉ hỗ trợ QR 7 trường: `CCCD|CMND cũ|Họ tên|Ngày sinh|Giới tính|Địa chỉ|Ngày cấp`. CCCD đúng 12 chữ số ASCII; CMND cũ trống hoặc 9 chữ số; tên/địa chỉ không trống; giới tính `Nam`/`Nữ`; hai ngày hợp lệ dạng `ddMMyyyy`. Định dạng khác, URL và QR có nhiều payload CCCD khác nhau sẽ không điền tự động.
+- Chỉ hỗ trợ QR 7 trường: `CCCD|CMND cũ|Họ tên|Ngày sinh|Giới tính|Địa chỉ|Ngày cấp`. CCCD đúng 12 chữ số ASCII; CMND cũ trống hoặc 9 chữ số; tên không trống; địa chỉ có thể trống; giới tính `Nam`/`Nữ`; hai ngày hợp lệ dạng `ddMMyyyy`. Định dạng khác, URL và QR có nhiều payload CCCD khác nhau sẽ không điền tự động.
 - Chưa có OCR. Ảnh không đọc được QR hoặc ảnh mờ/QR quá nhỏ không làm thay đổi thông tin; hãy chụp rõ một CCCD, đủ viền QR. Giới hạn ảnh 24 triệu điểm ảnh, quét ở kích thước gốc (tối đa cạnh 3200 px) và các tỷ lệ khác nhau; không chỉ phóng to ảnh QR nhỏ. Không đảm bảo đọc mọi QR hỏng hoặc nhận ra QR không giải mã được.
 - Xử lý ảnh hoàn toàn tại máy bằng OpenCV, không gửi ảnh/payload lên mạng. `MoUngDung.bat` kiểm tra thư viện và cài thư viện còn thiếu bằng đúng Python đang dùng (bước cài đặt cần Internet; quét không cần Internet).
 
@@ -43,11 +43,13 @@ Mặc định là thư mục `data` cạnh `app.py`. Dòng **Nơi lưu** ở ch�
 
 Trong nơi lưu: `customers.sqlite3` chứa hồ sơ và liên kết ảnh; `images/` chứa ảnh đặt tên ngẫu nhiên; `print-preview/` chứa bản xem trước in nếu có. Không đổi tên hoặc xóa riêng ảnh. Không có kết nối mạng hay tải dữ liệu lên máy chủ.
 
+Hồ sơ cũ được bổ sung cột SQLite `address` với mặc định trống khi mở ứng dụng; migration chỉ thêm cột nếu chưa có, giữ nguyên các trường cũ và ảnh.
+
 ## Sao lưu và bảo mật
 - Đóng ứng dụng rồi sao chép **toàn bộ thư mục đang hiển thị ở Nơi lưu** sang nơi an toàn. Để khôi phục, đóng ứng dụng và thay nội dung nơi lưu bằng bản sao lưu đầy đủ. Giữ lại bản hiện tại trước khi thay. Không chạy nhiều phiên ứng dụng khi chuyển nơi lưu.
 - Đây là bản dùng cục bộ, **chưa có mật khẩu ứng dụng hoặc mã hóa dữ liệu**. Người có quyền đọc thư mục có thể đọc hồ sơ và ảnh.
 - Chỉ lưu ảnh khi có quyền / sự đồng ý cần thiết. Bảo vệ tài khoản Windows, hạn chế quyền truy cập, cân nhắc BitLocker. Không đưa data lên Git hoặc thư mục công khai.
-- Không thiết kế cho nhiều máy cùng ghi dữ liệu qua ổ mạng. Cột **Thao tác** có **Chi tiết / Sửa / Xóa**. Chi tiết mở modal hiển thị tên, SĐT, CCCD, mã hồ sơ, thời gian cập nhật UTC, ghi chú đầy đủ và danh sách tất cả ảnh (chọn từng ảnh để xem hoặc mở ảnh gốc). Nút Sửa đưa hồ sơ vào form bên phải. Xóa yêu cầu xác nhận, xóa vĩnh viễn hồ sơ cùng ảnh; nếu tệp ảnh không xóa được, ứng dụng cảnh báo các đường dẫn còn lại. Nên sao lưu trước khi xóa.
+- Không thiết kế cho nhiều máy cùng ghi dữ liệu qua ổ mạng. Cột **Thao tác** có **Chi tiết / Sửa / Xóa**. Chi tiết mở modal hiển thị tên, SĐT, CCCD, mã hồ sơ, thời gian cập nhật UTC, địa chỉ và ghi chú đầy đủ (xuống dòng, chỉ đọc, có thanh cuộn) và danh sách tất cả ảnh (chọn từng ảnh để xem hoặc mở ảnh gốc). Nút Sửa đưa hồ sơ vào form bên phải. Xóa yêu cầu xác nhận, xóa vĩnh viễn hồ sơ cùng ảnh; nếu tệp ảnh không xóa được, ứng dụng cảnh báo các đường dẫn còn lại. Nên sao lưu trước khi xóa.
 
 ## Kiểm thử
 Cài phụ thuộc kiểm thử: `python -m pip install -r requirements-test.txt` (hoặc `uv pip install --python "đường dẫn python.exe" -r requirements-test.txt` nếu môi trường không có pip). `qrcode` chỉ dùng tạo fixture tổng hợp, không cần cho ứng dụng.
