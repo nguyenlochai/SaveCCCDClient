@@ -1,4 +1,4 @@
-"""Read-only customer modal with fitted attachment gallery."""
+"""Customer details with fitted attachment gallery and explicit deletion."""
 import tkinter as tk
 from tkinter import ttk
 from ui import RoundedPanel, RoundButton, RoundEntry, label, icon, PAGE, LINE, NAVY
@@ -20,6 +20,8 @@ def build_detail(dialog,parent,store,record,images):
     RoundButton(footer,'Mở ảnh gốc',dialog.open_original,icon_name='open',width=140).pack(side='left')
     dialog.print_button=RoundButton(footer,'In ảnh',dialog.print_photo,width=100)
     dialog.print_button.pack(side='left',padx=(8,0))
+    dialog.delete_photo_button=RoundButton(footer,'Xóa ảnh đã chọn',dialog.delete_photo,width=160,danger=True,icon_name='delete')
+    dialog.delete_photo_button.pack(side='left',padx=(8,0))
     dialog.close_button=RoundButton(footer,'Đóng',dialog.close,primary=True,width=100,style='Accent.TButton');dialog.close_button.pack(side='right')
     info=tk.Frame(content,bg='white');info.pack(fill='x',padx=20);info.columnconfigure(1,weight=1)
     for i,(key,text) in enumerate([('name','Tên khách hàng'),('phone','Số điện thoại'),('cccd','CCCD'),('id','Mã hồ sơ'),('updated','Cập nhật (UTC)')]):
@@ -32,7 +34,8 @@ def build_detail(dialog,parent,store,record,images):
     note_scroll=ttk.Scrollbar(notes_panel.content,command=dialog.notes.yview);note_scroll.pack(side='right',fill='y');dialog.notes.configure(yscrollcommand=note_scroll.set)
     dialog.notes.pack(fill='both',expand=True);dialog.notes.insert('1.0',record['notes']);dialog.notes.configure(state='disabled')
     gallery_title=tk.Frame(content,bg='white');gallery_title.pack(fill='x',padx=20,pady=(17,8))
-    label(gallery_title,f'Ảnh đã lưu ({len(images)})',bold=True,size=14).pack(side='left')
+    dialog.photo_count=label(gallery_title,f'Ảnh đã lưu ({len(images)})',bold=True,size=14)
+    dialog.photo_count.pack(side='left')
     label(gallery_title,'Chọn ảnh để xem trước',muted=True,size=11).pack(side='right')
     gallery=tk.Frame(content,bg='white');gallery.pack(fill='both',expand=True,padx=20)
     listing=RoundedPanel(gallery,radius=9,width=215,padding=6);listing.pack(side='left',fill='y',padx=(0,12))

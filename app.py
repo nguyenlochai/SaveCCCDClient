@@ -4,7 +4,8 @@ import sqlite3
 import unicodedata
 import uuid
 import shutil
-from PIL import Image
+import tempfile
+from PIL import Image, ImageGrab
 
 BASE = Path(__file__).resolve().parent
 
@@ -92,6 +93,18 @@ class Store:
     def image_path(self, image):
         return self.root / 'images' / image['filename']
 
+    def delete_image(self, customer_id, image_id):
+        """Remove only an owned attachment; keep its row if unlink fails."""
+        with self.db:
+            image = self.db.execute(
+                'SELECT * FROM images WHERE customer_id=? AND id=?',
+                (customer_id, image_id)).fetchone()
+            if image is None:
+                raise ValueError('Ảnh không còn tồn tại hoặc không thuộc khách hàng này.')
+            self.image_path(image).unlink(missing_ok=True)
+            self.db.execute('DELETE FROM images WHERE customer_id=? AND id=?',
+                            (customer_id, image_id))
+
     def delete(self, customer_id):
         _, images = self.get(customer_id)
         with self.db:
@@ -114,11 +127,50 @@ from tkinter import ttk, filedialog, messagebox
 from PIL import ImageTk, ImageOps
 
 
+def confirm_photo_deletion(parent, store, customer_id, image):
+    if not messagebox.askyesno('Xác nhận xóa ảnh',
+            f"Xóa vĩnh viễn ảnh đã lưu: {image['original_name']}?\n\n"
+            'Chỉ ảnh này bị xóa ngay; khách hàng và các ảnh khác được giữ nguyên. '
+            'Không thể hoàn tác.', icon='warning', default='no', parent=parent):
+        return False
+    try:
+        store.delete_image(customer_id, image['id'])
+    except Exception as exc:
+        messagebox.showerror('Không thể xóa ảnh', str(exc), parent=parent)
+        return False
+    return True
+
+
 class DetailDialog(tk.Toplevel):
-    def __init__(self, parent, store, record, images):
+    def __init__(self, parent, store, record, images, on_photo_deleted=None):
         super().__init__(parent)
+        self.customer_id = record['id']
+        self.on_photo_deleted = on_photo_deleted
         from detail_layout import build_detail
         build_detail(self, parent, store, record, images)
+
+    def delete_photo(self):
+        selected = self.photo_list.curselection()
+        if not selected:
+            return
+        index = selected[0]
+        image = self.images[index]
+        if not confirm_photo_deletion(self, self.store, self.customer_id, image):
+            return
+        self.images.pop(index)
+        self.photo_list.delete(0, 'end')
+        for number, item in enumerate(self.images, 1):
+            self.photo_list.insert('end', f"{number}. {item['original_name']}")
+        self.photo_count.configure(text=f'Ảnh đã lưu ({len(self.images)})')
+        self.preview_image = None
+        self.preview.configure(image='', text='Chưa có ảnh')
+        if self.images:
+            index = min(index, len(self.images) - 1)
+            self.photo_list.selection_set(index)
+            self.photo_list.see(index)
+            self.show_photo()
+        if self.on_photo_deleted is not None:
+            self.on_photo_deleted(self.customer_id, image['id'])
 
     def show_photo(self):
         selected = self.photo_list.curselection()
@@ -135,13 +187,13 @@ class DetailDialog(tk.Toplevel):
             self.preview.configure(image='', text='Không đọc được ảnh đã lưu.')
 
     def print_photo(self):
-        selected = self.photo_list.curselection()
-        if not selected:
-            messagebox.showinfo('In ảnh', 'Vui lòng chọn một ảnh đã lưu để in.', parent=self)
+        if not self.images:
+            messagebox.showinfo('In ảnh', 'Khách hàng chưa có ảnh đã lưu để in.', parent=self)
             return
         try:
             from printing import open_print_preview
-            open_print_preview(self.store.image_path(self.images[selected[0]]), self.store.root / 'print-preview')
+            sources = [self.store.image_path(image) for image in self.images]
+            open_print_preview(sources, self.store.root / 'print-preview')
         except Exception as exc:
             messagebox.showerror('Không mở được bản in', str(exc), parent=self)
 
@@ -165,6 +217,15 @@ class DetailDialog(tk.Toplevel):
 class App:
     def __init__(self, root, store, config_path=None):
         from layout import build_app
+        self._scan_busy = False
+        self._scan_after = None
+        self._scan_revision = 0
+        self.scan_source = None
+        self.scan_preview_image = None
+        self._scan_files = set()
+        self._scan_directory = None
+        self._pasted_files = set()
+        self._paste_directory = None
         self.config_path = Path(config_path) if config_path is not None else BASE / 'storage.json'
         build_app(self, root, store)
 
@@ -200,6 +261,7 @@ class App:
         self.status.set('Đã đổi nơi lưu dữ liệu. Bản dữ liệu cũ vẫn được giữ nguyên.')
 
     def mark_dirty(self, *args):
+        self._scan_revision += 1
         if not self.loading:
             self.dirty = True
 
@@ -258,7 +320,13 @@ class App:
     def show_details(self, cid):
         record, images = self.store.get(cid)
         if record is not None:
-            self.detail_dialog = DetailDialog(self.root, self.store, record, images)
+            self.detail_dialog = DetailDialog(self.root, self.store, record, images, self.photo_deleted)
+
+    def photo_deleted(self, customer_id, image_id):
+        if self.current_id == customer_id:
+            selected = self.photos.curselection()
+            self.saved_images = [image for image in self.saved_images if image['id'] != image_id]
+            self.render_photos(selected[0] if selected else 0)
 
     def delete_customer(self, cid):
         record, images = self.store.get(cid)
@@ -301,6 +369,8 @@ class App:
     def new_customer(self):
         if not self.can_leave():
             return
+        self.cleanup_pasted()
+        self.clear_scan_photo()
         self.loading = True
         self.current_id = None
         for variable in (self.name, self.phone, self.cccd):
@@ -317,6 +387,8 @@ class App:
         record, images = self.store.get(cid)
         if record is None:
             return
+        self.cleanup_pasted()
+        self.clear_scan_photo()
         self.loading = True
         self.current_id = cid
         self.name.set(record['name'])
@@ -343,6 +415,53 @@ class App:
             self.tree.see(cid)
         self.status.set(f'Đã lưu: {self.name.get()} • {len(self.saved_images)} ảnh • {self.store.root.resolve()}')
 
+    def cleanup_pasted(self, path=None):
+        """Delete only temporary files created by this application instance."""
+        targets = self._pasted_files.copy() if path is None else {path} & self._pasted_files
+        failed = []
+        for target in targets:
+            try:
+                target.unlink(missing_ok=True)
+                self._pasted_files.discard(target)
+            except OSError:
+                failed.append(str(target))
+        if self._paste_directory is not None and not self._pasted_files:
+            try:
+                self._paste_directory.rmdir()
+                self._paste_directory = None
+            except OSError:
+                failed.append(str(self._paste_directory))
+        if failed:
+            messagebox.showwarning('Chưa dọn được ảnh tạm',
+                'Không thể xóa các tệp tạm sau (có thể đang mở ở ứng dụng khác). '
+                'Đóng ứng dụng đang giữ tệp rồi thử lại; nếu đã thoát SaveCCCD, hãy xóa thủ công:\n' + '\n'.join(failed), parent=self.root)
+
+    def paste_photo(self, event=None):
+        path = None
+        created = False
+        try:
+            clipboard = ImageGrab.grabclipboard()
+            if not isinstance(clipboard, Image.Image):
+                messagebox.showinfo('Dán ảnh', 'Clipboard chưa có ảnh. Nhấn Win+Shift+S để chụp, rồi bấm Dán ảnh.\nẢnh có sẵn trên ổ đĩa: dùng Chọn ảnh.', parent=self.root)
+                return 'break'
+            if self._paste_directory is None:
+                self._paste_directory = Path(tempfile.mkdtemp(prefix='SaveCCCD-paste-'))
+            path = self._paste_directory / f'Anh-dan-{uuid.uuid4().hex}.png'
+            with path.open('xb') as output:
+                created = True
+                self._pasted_files.add(path)
+                clipboard.save(output, format='PNG')
+        except Exception as exc:
+            if created:
+                self.cleanup_pasted(path)
+            messagebox.showerror('Không thể dán ảnh', str(exc), parent=self.root)
+            return 'break'
+        self.pending.append(path)
+        self.dirty = True
+        self.render_photos(len(self.saved_images) + len(self.pending) - 1)
+        self.status.set('Đã dán ảnh • Bấm Lưu khách hàng để lưu vào nơi đã chọn.')
+        return 'break'
+
     def add_photos(self):
         paths = filedialog.askopenfilenames(parent=self.root, title='Chọn ảnh khách hàng / CCCD', filetypes=[('Ảnh', '*.jpg *.jpeg *.png *.webp *.bmp'), ('Tất cả', '*.*')])
         for item in paths:
@@ -353,6 +472,23 @@ class App:
             self.dirty = True
             self.render_photos()
 
+    def delete_photo(self):
+        selected = self.photos.curselection()
+        if not selected:
+            return
+        index = selected[0]
+        if index >= len(self.saved_images):
+            path = self.pending.pop(index - len(self.saved_images))
+            self.cleanup_pasted(path)
+            self.dirty = True
+        else:
+            image = self.saved_images[index]
+            if not confirm_photo_deletion(self.root, self.store, self.current_id, image):
+                return
+            self.saved_images.pop(index)
+            self.status.set(f"Đã xóa ảnh: {image['original_name']}")
+        self.render_photos(index)
+
     def remove_pending(self):
         selected = self.photos.curselection()
         if not selected:
@@ -361,20 +497,24 @@ class App:
         if index < 0:
             messagebox.showinfo('Ảnh đã lưu', 'Nút này chỉ bỏ ảnh mới chọn, không xóa ảnh đã lưu.', parent=self.root)
             return
-        self.pending.pop(index)
+        path = self.pending.pop(index)
+        self.cleanup_pasted(path)
         self.dirty = True
         self.render_photos()
 
-    def render_photos(self):
+    def render_photos(self, selected_index=0):
         self.photos.delete(0, 'end')
         for image in self.saved_images:
             self.photos.insert('end', image['original_name'])
         for path in self.pending:
             self.photos.insert('end', '[Chưa lưu] ' + path.name)
+        self.photo_count.configure(text=f'Ảnh khách hàng ({len(self.saved_images)} đã lưu, {len(self.pending)} chưa lưu)')
         self.preview_image = None
         self.preview.configure(image='', text='Ảnh xem trước')
         if self.photos.size():
-            self.photos.selection_set(0)
+            index = min(selected_index, self.photos.size() - 1)
+            self.photos.selection_set(index)
+            self.photos.see(index)
             self.preview_photo()
 
     def selected_photo(self):
@@ -383,6 +523,152 @@ class App:
             return None
         index = selected[0]
         return self.store.image_path(self.saved_images[index]) if index < len(self.saved_images) else self.pending[index - len(self.saved_images)]
+
+    def cleanup_scan_files(self):
+        """Remove only owned scan copies, never the user's original file."""
+        failed = False
+        for path in self._scan_files.copy():
+            if path == self.scan_source:
+                continue
+            try:
+                path.unlink(missing_ok=True)
+                self._scan_files.discard(path)
+            except OSError:
+                failed = True
+        if self._scan_directory is not None and not self._scan_files:
+            try:
+                self._scan_directory.rmdir()
+                self._scan_directory = None
+            except OSError:
+                failed = True
+        if failed:
+            messagebox.showwarning('Chưa dọn được ảnh quét tạm',
+                'Ảnh tạm đang bị khóa. Đóng ứng dụng giữ tệp rồi thử Xóa ảnh quét lần nữa. '
+                'Thư mục tạm: ' + str(self._scan_directory), parent=self.root)
+
+    def clear_scan_photo(self):
+        self._scan_revision += 1
+        self.scan_source = None
+        self.scan_preview_image = None
+        self.scan_preview.configure(image='', text='Một ảnh QR để quét\nKhông lưu / không in')
+        self.cleanup_scan_files()
+
+    def set_scan_image(self, source):
+        """Stage one validated image separately from customer attachments."""
+        path = None
+        try:
+            if isinstance(source, Image.Image):
+                image = ImageOps.exif_transpose(source)
+            else:
+                with Image.open(source) as original:
+                    if original.width * original.height > 24_000_000:
+                        raise ValueError('Ảnh vượt 24 triệu điểm ảnh.')
+                    image = ImageOps.exif_transpose(original)
+            if image.width * image.height > 24_000_000:
+                raise ValueError('Ảnh vượt 24 triệu điểm ảnh.')
+            if self._scan_directory is None:
+                self._scan_directory = Path(tempfile.mkdtemp(prefix='SaveCCCD-scan-'))
+            candidate = self._scan_directory / (uuid.uuid4().hex + '.png')
+            with candidate.open('xb') as output:
+                path = candidate
+                self._scan_files.add(path)
+                image.save(output, format='PNG')
+            preview = image.copy()
+            preview.thumbnail((110, 78))
+            preview_image = ImageTk.PhotoImage(preview, master=self.root)
+        except Exception:
+            self.cleanup_scan_files()
+            messagebox.showerror('Không thể chọn ảnh quét',
+                'Không đọc hoặc tạo được ảnh quét (tối đa 24 triệu điểm ảnh). Ảnh trước được giữ nguyên.', parent=self.root)
+            return
+        self._scan_revision += 1
+        self.scan_source = path
+        self.scan_preview_image = preview_image
+        self.scan_preview.configure(image=preview_image, text='')
+        self.cleanup_scan_files()
+        self.status.set('Ảnh quét riêng • Không lưu vào hồ sơ, không đưa vào bản in.')
+
+    def choose_scan_photo(self):
+        path = filedialog.askopenfilename(parent=self.root, title='Chọn một ảnh để quét CCCD (không lưu)',
+                filetypes=[('Ảnh', '*.jpg *.jpeg *.png *.webp *.bmp'), ('Tất cả', '*.*')])
+        if path:
+            self.set_scan_image(path)
+
+    def paste_scan_photo(self, event=None):
+        try:
+            image = ImageGrab.grabclipboard()
+        except Exception:
+            messagebox.showerror('Không thể dán ảnh quét', 'Không đọc được clipboard. Hãy thử lại.', parent=self.root)
+            return 'break'
+        if not isinstance(image, Image.Image):
+            messagebox.showinfo('Dán ảnh quét', 'Clipboard chưa có ảnh. Nhấn Win+Shift+S rồi Dán ảnh trong vùng quét.', parent=self.root)
+            return 'break'
+        self.set_scan_image(image)
+        return 'break'
+
+    def scan_photo(self):
+        """Decode the separate scan input off Tk; apply only to unchanged drafts."""
+        if self._scan_busy:
+            return
+        path = self.scan_source
+        if path is None:
+            messagebox.showinfo('Quét thông tin CCCD', 'Chọn hoặc dán một ảnh trong vùng Quét thông tin CCCD riêng.', parent=self.root)
+            return
+        import queue
+        import threading
+        from cccd_qr import scan_cccd, ScanError
+        def snapshot():
+            return (self._scan_revision, id(self.store), self.current_id,
+                    self.scan_source, self.name.get(), self.cccd.get(),
+                    self.phone.get(), self.notes.get('1.0', 'end-1c'))
+        before = snapshot()
+        result = queue.Queue(maxsize=1)
+        self._scan_busy = True
+        self.scan_photo_button.state(['disabled'])
+        self.scan_photo_button.configure(text='Đang quét QR…')
+        self.status.set('Đang quét mã QR cục bộ; không gửi ảnh lên mạng.')
+        def work():
+            try:
+                result.put((scan_cccd(path), None))
+            except ScanError as exc:
+                result.put((None, str(exc)))
+            except ImportError:
+                result.put((None, 'Thiếu thư viện quét QR. Đóng và mở lại bằng MoUngDung.bat để cài thư viện.'))
+            except Exception:
+                result.put((None, 'Không thể quét ảnh. Hãy thử ảnh rõ hơn.'))
+        def poll():
+            self._scan_after = None
+            try:
+                identity, error = result.get_nowait()
+            except queue.Empty:
+                self._scan_after = self.root.after(50, poll)
+                return
+            self._scan_busy = False
+            self.scan_photo_button.state(['!disabled'])
+            self.scan_photo_button.configure(text='Quét')
+            if before != snapshot():
+                self.status.set('Đã bỏ kết quả QR vì ảnh hoặc thông tin đang sửa đã thay đổi. Hãy quét lại.')
+                return
+            if error:
+                self.status.set('Chưa điền thông tin CCCD từ QR.')
+                messagebox.showerror('Không thể quét CCCD', error, parent=self.root)
+                return
+            name, cccd = identity
+            if ((self.name.get().strip() and self.name.get() != name)
+                    or (self.cccd.get().strip() and self.cccd.get() != cccd)):
+                if not messagebox.askyesno('Thay thông tin từ QR?',
+                        'Tên hoặc CCCD hiện tại khác với QR. Thay hai ô này bằng thông tin đọc từ QR?\n'
+                        'Các thông tin và ảnh khác được giữ nguyên. Chưa lưu tự động.',
+                        default='no', parent=self.root):
+                    self.status.set('Đã hủy điền thông tin từ QR; dữ liệu giữ nguyên.')
+                    return
+            self.name.set(name)
+            self.cccd.set(cccd)
+            self.dirty = True
+            self.form_canvas.yview_moveto(0)
+            self.status.set('Đã điền tên và CCCD từ QR. Kiểm tra lại rồi bấm Lưu; đây không phải xác thực danh tính.')
+        threading.Thread(target=work, daemon=True, name='local-cccd-qr').start()
+        self._scan_after = self.root.after(50, poll)
 
     def preview_photo(self):
         path = self.selected_photo()
@@ -408,6 +694,11 @@ class App:
 
     def close_window(self):
         if self.can_leave():
+            if self._scan_after is not None:
+                self.root.after_cancel(self._scan_after)
+                self._scan_after = None
+            self.cleanup_pasted()
+            self.clear_scan_photo()
             self.root.destroy()
 
 
