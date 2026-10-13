@@ -7,7 +7,7 @@ NAVY = '#193d67'
 MUTED = '#74889f'
 PAGE = '#edf4fb'
 LINE = '#d6e3f0'
-FONT = ('Segoe UI', -13)
+FONT = ('Segoe UI', -15)
 
 
 def rounded_image(width, height, radius, fill, border=None, dashed=False):
@@ -68,7 +68,7 @@ class RoundedPanel(tk.Canvas):
 
 class RoundButton(tk.Canvas):
     def __init__(self, master, text, command=None, width=110, height=36, primary=False, danger=False, icon_name=None, style='', **kwargs):
-        super().__init__(master,width=width,height=height,bg=master.cget('bg'),highlightthickness=0,bd=0,takefocus=1,cursor='hand2',**kwargs)
+        super().__init__(master,width=width,height=max(32,height),bg=master.cget('bg'),highlightthickness=0,bd=0,takefocus=1,cursor='hand2',**kwargs)
         self.text,self.command,self.primary,self.danger,self.style=text,command,primary,danger,style
         self.disabled=False; self.hover=False
         self.icon_name=icon_name
@@ -85,11 +85,11 @@ class RoundButton(tk.Canvas):
         self.surface=rounded_image(self.winfo_width(),self.winfo_height(),7,fill,BLUE if self.focus_get()==self else ('#f0d7df' if self.danger else LINE))
         self.create_image(0,0,image=self.surface,anchor='nw')
         import tkinter.font as tf
-        font=('Segoe UI',-12 if self.winfo_height()<33 else -13,'bold' if self.primary else 'normal')
-        length=tf.Font(font=font).measure(self.text)+(22 if self.icon_name else 0)
+        font=('Segoe UI',-14,'bold' if self.primary else 'normal')
+        length=tf.Font(font=font).measure(self.text)+(24 if self.icon_name else 0)
         start=(self.winfo_width()-length)/2
         if self.icon_name:
-            self.glyph=icon(self,self.icon_name,16,fg); self.create_image(start+8,self.winfo_height()/2,image=self.glyph); start+=22
+            self.glyph=icon(self,self.icon_name,19,fg); self.create_image(start+9,self.winfo_height()/2,image=self.glyph); start+=24
         self.create_text(start,self.winfo_height()/2,text=self.text,fill=fg,font=font,anchor='w')
     def invoke(self):
         if not self.disabled and self.command: return self.command()
@@ -105,7 +105,7 @@ class RoundButton(tk.Canvas):
     def instate(self,values): return self.disabled if 'disabled' in values else not self.disabled
 
 
-def label(master,text='',bold=False,size=13,muted=False,**kwargs):
+def label(master,text='',bold=False,size=15,muted=False,**kwargs):
     return tk.Label(master,text=text,bg=master.cget('bg'),fg=MUTED if muted else NAVY,font=('Segoe UI',-size,'bold' if bold else 'normal'),**kwargs)
 
 
@@ -129,7 +129,7 @@ class RoundEntry(RoundedPanel):
         self.surface=rounded_image(self.winfo_width(),self.winfo_height(),7,self.fill,LINE)
         self.delete('all');self.create_image(0,0,image=self.surface,anchor='nw')
         if self.icon_name:
-            self.glyph=icon(self,self.icon_name,17,'#87a0bd');self.create_image(17,self.winfo_height()/2,image=self.glyph)
+            self.glyph=icon(self,self.icon_name,20,'#87a0bd');self.create_image(17,self.winfo_height()/2,image=self.glyph)
 
 
 class ImageChooser(tk.Canvas):
@@ -141,7 +141,7 @@ class ImageChooser(tk.Canvas):
         w,h=self.winfo_width(),self.winfo_height();self.delete('all')
         self.surface=rounded_image(w,h,9,'#f6faff',dashed=True)
         self.create_image(0,0,image=self.surface,anchor='nw')
-        self.glyph=icon(self,'image',26);self.create_image(w/2,24,image=self.glyph)
-        self.create_text(w/2,49,text='Chọn ảnh',font=('Segoe UI',-14,'bold'),fill=BLUE)
-        self.create_text(w/2,72,text='Nhấp để chọn một hoặc nhiều ảnh',font=('Segoe UI',-11),fill=MUTED)
-        self.create_text(w/2,90,text='JPG, PNG, WEBP, BMP',font=('Segoe UI',-10),fill=MUTED)
+        self.glyph=icon(self,'image',30);self.create_image(w/2,24,image=self.glyph)
+        self.create_text(w/2,51,text='Chọn ảnh',font=('Segoe UI',-16,'bold'),fill=BLUE)
+        self.create_text(w/2,74,text='Nhấp để chọn một hoặc nhiều ảnh',font=('Segoe UI',-13),fill=MUTED)
+        self.create_text(w/2,94,text='JPG, PNG, WEBP, BMP',font=('Segoe UI',-12),fill=MUTED)

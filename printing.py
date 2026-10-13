@@ -42,12 +42,7 @@ img{display:block;width:85.6mm;height:54mm;width:var(--photo-width);height:var(-
 <p><strong>''' + count + '''</strong> · 2 ảnh mỗi trang, xếp trên / dưới.</p>
 <div class="controls"><label>Rộng (mm) <input id="photo-width" type="number" min="30" max="180" step="0.1" value="85.6"></label>
 <label>Cao (mm) <input id="photo-height" type="number" min="20" max="125" step="0.1" value="54"></label>
-<button type="button" onclick="window.print()">Chọn máy in / In ảnh</button></div>
-<p>In tất cả ảnh đã lưu của khách hàng. Chọn máy in và số bản trong hộp thoại in.<br>
-Khổ A4, chiều dọc; tỷ lệ in 100%. Mặc định mỗi ảnh nằm trong khung 8,56 × 5,4 cm; chỉnh kích thước phía trên để xem trước và in.<br>
-Ảnh giữ nguyên tỷ lệ, không cắt; nếu ảnh có nền dư thì phần thẻ sẽ nhỏ hơn khung.<br>
-Tắt đầu trang/chân trang nếu trình duyệt đang bật.<br>
-Chỉ in sau khi xác nhận. Đóng tab này khi sử dụng xong.</p></header>
+<button type="button" onclick="window.print()">Chọn máy in / In ảnh</button></div></header>
 <main>''' + sheets + '''</main><script>
 for (const [id, property] of [['photo-width', '--photo-width'], ['photo-height', '--photo-height']]) {
   const input = document.getElementById(id);
