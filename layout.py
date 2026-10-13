@@ -146,6 +146,8 @@ def build_app(app,root,store):
     photo_actions=tk.Frame(form,bg='white');photo_actions.pack(fill='x')
     app.paste_photo_button=RoundButton(photo_actions,'Dán ảnh',app.paste_photo,width=100,height=29)
     app.paste_photo_button.pack(side='left',padx=(0,8))
+    app.rotate_photo_button=RoundButton(photo_actions,'Xoay 90° ↻',app.rotate_photo,width=105,height=29)
+    app.rotate_photo_button.pack(side='left',padx=(0,8))
     app.delete_photo_button=RoundButton(photo_actions,'Xóa ảnh đã chọn',app.delete_photo,width=165,height=29,danger=True,icon_name='delete')
     app.delete_photo_button.pack(side='left')
 

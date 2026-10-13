@@ -53,7 +53,25 @@ class Store:
             if not existing:
                 self.db.commit()
 
-    def save(self, customer_id, name, phone, cccd, notes, photos=(), *, address=''):
+    def rotate_image(self, customer_id, image_id):
+        """Atomically replace one owned saved photo with its clockwise rotation."""
+        with self.db:
+            image = self.db.execute('SELECT * FROM images WHERE customer_id=? AND id=?',
+                                    (customer_id, image_id)).fetchone()
+            if image is None:
+                raise ValueError('Ảnh không còn tồn tại hoặc không thuộc khách hàng này.')
+            target = self.image_path(image)
+            temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
+            try:
+                with Image.open(target) as source:
+                    rotated = ImageOps.exif_transpose(source).transpose(Image.Transpose.ROTATE_270)
+                    fmt = source.format if source.format in ('PNG', 'JPEG', 'WEBP', 'BMP') else 'PNG'
+                    rotated.save(temporary, format=fmt)
+                os.replace(temporary, target)
+            finally:
+                temporary.unlink(missing_ok=True)
+
+    def save(self, customer_id, name, phone, cccd, notes, photos=(), *, address='', photo_rotations=None):
         import re
         name, cccd = name.strip(), cccd.strip()
         phone = re.sub(r'[\s.()-]', '', phone.strip())
@@ -84,7 +102,16 @@ class Store:
                     filename = image_id + source.suffix.lower()
                     target = self.root / 'images' / filename
                     copied.append(target)
-                    shutil.copyfile(source, target)
+                    turns = (photo_rotations or {}).get(source, 0) % 4
+                    if turns:
+                        with Image.open(source) as original:
+                            rotated = ImageOps.exif_transpose(original).transpose(
+                                (Image.Transpose.ROTATE_270, Image.Transpose.ROTATE_180,
+                                 Image.Transpose.ROTATE_90)[turns - 1])
+                            fmt = original.format if original.format in ('PNG', 'JPEG', 'WEBP', 'BMP') else 'PNG'
+                            rotated.save(target, format=fmt)
+                    else:
+                        shutil.copyfile(source, target)
                     self.db.execute('INSERT INTO images VALUES(?,?,?,?)',
                                     (image_id, customer_id, filename, source.name))
         except Exception:
@@ -193,6 +220,20 @@ class DetailDialog(tk.Toplevel):
         if self.on_photo_deleted is not None:
             self.on_photo_deleted(self.customer_id, image['id'])
 
+    def rotate_photo(self):
+        selected = self.photo_list.curselection()
+        if not selected:
+            return
+        try:
+            self.store.rotate_image(self.customer_id, self.images[selected[0]]['id'])
+            self.show_photo()
+            if self.on_photo_deleted is not None:
+                owner = getattr(self.on_photo_deleted, '__self__', None)
+                if owner is not None and getattr(owner, 'current_id', None) == self.customer_id:
+                    owner.preview_photo()
+        except Exception as exc:
+            messagebox.showerror('Không thể xoay ảnh', str(exc), parent=self)
+
     def show_photo(self):
         selected = self.photo_list.curselection()
         if not selected:
@@ -247,6 +288,7 @@ class App:
         self._scan_directory = None
         self._pasted_files = set()
         self._paste_directory = None
+        self.pending_rotations = {}
         self.config_path = Path(config_path) if config_path is not None else BASE / 'storage.json'
         build_app(self, root, store)
 
@@ -445,6 +487,7 @@ class App:
         self.notes.delete('1.0', 'end')
         self.notes.edit_modified(False)
         self.pending, self.saved_images = [], []
+        self.pending_rotations.clear()
         self.render_photos()
         self.heading.configure(text='⊕  Tạo khách hàng mới')
         self.tree.selection_remove(*self.tree.selection())
@@ -466,13 +509,14 @@ class App:
         self.notes.insert('1.0', record['notes'])
         self.notes.edit_modified(False)
         self.saved_images, self.pending = list(images), []
+        self.pending_rotations.clear()
         self.heading.configure(text='Thông tin khách hàng')
         self.render_photos()
         self.loading, self.dirty = False, False
 
     def save_customer(self):
         try:
-            cid = self.store.save(self.current_id, self.name.get(), self.phone.get(), self.cccd.get(), self.notes.get('1.0', 'end-1c'), self.pending, address=self.address.get())
+            cid = self.store.save(self.current_id, self.name.get(), self.phone.get(), self.cccd.get(), self.notes.get('1.0', 'end-1c'), self.pending, address=self.address.get(), photo_rotations=self.pending_rotations)
         except Exception as exc:
             messagebox.showerror('Không thể lưu', str(exc), parent=self.root)
             return
@@ -540,6 +584,25 @@ class App:
             self.dirty = True
             self.render_photos()
 
+    def rotate_photo(self):
+        selected = self.photos.curselection()
+        if not selected:
+            return
+        index = selected[0]
+        try:
+            if index < len(self.saved_images):
+                self.store.rotate_image(self.current_id, self.saved_images[index]['id'])
+            else:
+                path = self.pending[index - len(self.saved_images)]
+                with Image.open(path) as source:
+                    source.verify()
+                self.pending_rotations[path] = (self.pending_rotations.get(path, 0) + 1) % 4
+                self.dirty = True
+            self.preview_photo()
+            self.status.set('Đã xoay ảnh 90° sang phải' + (' • Bấm Lưu khách hàng để lưu.' if index >= len(self.saved_images) else ' • Đã lưu.'))
+        except Exception as exc:
+            messagebox.showerror('Không thể xoay ảnh', str(exc), parent=self.root)
+
     def delete_photo(self):
         selected = self.photos.curselection()
         if not selected:
@@ -548,6 +611,7 @@ class App:
         if index >= len(self.saved_images):
             path = self.pending.pop(index - len(self.saved_images))
             self.cleanup_pasted(path)
+            self.pending_rotations.pop(path, None)
             self.dirty = True
         else:
             image = self.saved_images[index]
@@ -567,6 +631,7 @@ class App:
             return
         path = self.pending.pop(index)
         self.cleanup_pasted(path)
+        self.pending_rotations.pop(path, None)
         self.dirty = True
         self.render_photos()
 
@@ -748,6 +813,12 @@ class App:
         try:
             with Image.open(path) as source:
                 image = ImageOps.exif_transpose(source)
+                selected = self.photos.curselection()
+                if selected and selected[0] >= len(self.saved_images):
+                    turns = self.pending_rotations.get(path, 0) % 4
+                    if turns:
+                        image = image.transpose((Image.Transpose.ROTATE_270, Image.Transpose.ROTATE_180,
+                                                 Image.Transpose.ROTATE_90)[turns - 1])
                 image.thumbnail((98, 78))
                 self.preview_image = ImageTk.PhotoImage(image, master=self.root)
             self.preview.configure(image=self.preview_image, text='')
