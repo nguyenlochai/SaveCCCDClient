@@ -45,10 +45,17 @@ def scan_cccd(path):
         # decoded identities are not silently ignored. Never crop out other QRs.
         ratios = dict.fromkeys((1.0, *(min(2.0, bound / max(gray.shape))
                                       for bound in (3200, 1600, 800))))
-        for ratio in ratios:
-            frame = gray if ratio == 1.0 else cv2.resize(
-                gray, None, fx=ratio, fy=ratio,
-                interpolation=cv2.INTER_NEAREST if ratio > 1 else cv2.INTER_AREA)
+        frames = [gray if ratio == 1.0 else cv2.resize(
+            gray, None, fx=ratio, fy=ratio,
+            interpolation=cv2.INTER_NEAREST if ratio > 1 else cv2.INTER_AREA)
+            for ratio in ratios]
+        # Tiny screenshot QR modules can be destroyed by nearest-neighbor
+        # enlargement. Cubic interpolation recovers some without changing
+        # the original or introducing a second QR decoder.
+        if max(gray.shape) < 800:
+            frames.append(cv2.resize(gray, None, fx=2, fy=2,
+                                     interpolation=cv2.INTER_CUBIC))
+        for frame in frames:
             _, payloads, _, _ = detector.detectAndDecodeMulti(frame)
             found.update(value for value in payloads if value)
             value, _, _ = detector.detectAndDecode(frame)

@@ -54,6 +54,8 @@ def build_app(app,root,store):
     section_heading=section(right,'Tạo khách hàng mới','plus');app.heading=section_heading
     app.query=tk.StringVar();app.page=1;app.total_pages=1;app.page_size=tk.StringVar(value='20')
     search_row=tk.Frame(left,bg='white');search_row.pack(fill='x',padx=15,pady=(16,8))
+    app.reload_button=RoundButton(search_row,'Tải lại',app.reload_customers,width=88)
+    app.reload_button.pack(side='right',padx=(8,0))
     app.search_button=RoundButton(search_row,'Tìm kiếm',app.change_page_size,primary=True,icon_name='search',width=110)
     app.search_button.pack(side='right',padx=(8,0))
     search=RoundEntry(search_row,app.query,'Nhập tên, SĐT hoặc CCCD…','search',height=36);search.pack(fill='x',expand=True)

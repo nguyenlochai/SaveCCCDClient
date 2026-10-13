@@ -357,6 +357,17 @@ class App:
         self.next_button.state(['disabled'] if self.page >= self.total_pages else ['!disabled'])
         self.root.after_idle(self.position_actions)
 
+    def reload_customers(self):
+        """Load committed records from shared storage without touching the form."""
+        try:
+            # Query first so an unavailable share does not erase visible rows.
+            self.store.search_page(self.query.get(), self.page, int(self.page_size.get()))
+            self.refresh()
+        except Exception as exc:
+            messagebox.showerror('Không tải lại được dữ liệu', str(exc), parent=self.root)
+            return
+        self.status.set('Đã tải lại danh sách khách hàng.')
+
     def position_actions(self):
         for cid, frame in self.action_rows.items():
             box = self.tree.bbox(cid, 'actions')
