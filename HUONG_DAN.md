@@ -35,19 +35,26 @@ CCCD phải đủ 12 chữ số, giữ nguyên số 0 đầu. Không cho tạo t
 ## Dữ liệu nằm ở đâu?
 Mặc định là thư mục `data` cạnh `app.py`. Dòng **Nơi lưu** ở chân cửa sổ luôn hiển thị đường dẫn đang dùng (có thể chọn/sao chép hoặc di chuyển con trỏ để đọc đường dẫn dài).
 
-- Bấm **Chọn nơi lưu dữ liệu**, chọn một thư mục **trống** trên ổ D:, E: hoặc ổ cục bộ khác, rồi xác nhận. Đây là nơi lưu chung cho **tất cả khách hàng**, không phải thư mục riêng từng người và không nhận đường dẫn web.
+- Bấm **Chuyển dữ liệu…**, chọn một thư mục **trống** trên ổ D:, E: hoặc ổ cục bộ khác, rồi xác nhận. Đây là nơi lưu chung cho **tất cả khách hàng**, không phải thư mục riêng từng người và không nhận đường dẫn web. Nút này không chuyển dữ liệu lên ổ mạng.
 - Ứng dụng sao chép toàn bộ cơ sở dữ liệu SQLite, ảnh và thư mục xem trước in; chỉ chuyển sang nơi mới sau khi kiểm tra bản sao. **Giữ nguyên dữ liệu cũ** để làm bản sao lưu; dữ liệu mới phát sinh chỉ ghi tại nơi mới.
 - Lưu chỉnh sửa đang làm trước khi chuyển. Nếu đồng ý bỏ chỉnh sửa, chúng chỉ bị bỏ sau khi chuyển thành công. Hủy hoặc lỗi chuyển không làm mất bản nháp.
 - Không chọn thư mục có sẵn dữ liệu hoặc thư mục nằm trong/bao quanh nơi lưu hiện tại. Không ghi đè dữ liệu đích.
 - Đường dẫn được ghi vào `storage.json` cạnh `app.py` và nhớ khi mở lại. Nếu ổ đĩa/thư mục đã chọn mất kết nối hoặc dữ liệu lỗi, ứng dụng báo lỗi và dừng, **không tự mở dữ liệu trống**. Kết nối lại đúng ổ đĩa hoặc khôi phục thư mục đầy đủ rồi mở lại; không xóa cấu hình để xử lý lỗi mất kết nối.
 
-Trong nơi lưu: `customers.sqlite3` chứa hồ sơ và liên kết ảnh; `images/` chứa ảnh đặt tên ngẫu nhiên; `print-preview/` chứa bản xem trước in nếu có. Không đổi tên hoặc xóa riêng ảnh. Không có kết nối mạng hay tải dữ liệu lên máy chủ.
+### Mở dữ liệu có sẵn (kể cả thư mục chia sẻ LAN)
+- Bấm **Mở dữ liệu có sẵn** ở chân cửa sổ, chọn đúng thư mục chứa cả `customers.sqlite3` và `images/`, đọc cảnh báo rồi xác nhận. Có thể chọn đường dẫn UNC `\\192.168.9.227\data` hoặc ổ mạng đã ánh xạ. Thư mục phải có dữ liệu hợp lệ từ trước; nút này không tạo cơ sở dữ liệu mới, không sao chép hay ghi đè bằng dữ liệu hiện tại.
+- Ứng dụng kiểm tra dữ liệu/ảnh, mở trực tiếp tại nơi chọn và nhớ đường dẫn trong `storage.json`. Lỗi mở hoặc lỗi ghi cấu hình giữ nơi lưu và bản nháp hiện tại. Hồ sơ cũ thiếu cột địa chỉ sẽ được bổ sung cột khi kích hoạt thành công.
+- Máy chủ phải đang bật, mạng ổn định và tài khoản Windows phải có quyền đọc/ghi thư mục cùng tệp. Nếu dữ liệu đang bận/bị khóa, dừng thao tác ghi ở máy khác rồi thử lại. Không xóa tệp khóa/journal để ép mở. Nếu mất kết nối, kết nối lại đúng nơi lưu; không tạo bản dữ liệu trống thay thế.
+- **SQLite qua SMB không bảo đảm an toàn khi nhiều máy cùng ghi. Không chỉnh sửa đồng thời**, kể cả hai hồ sơ khác nhau; các thao tác lưu/xóa ảnh cũng là ghi dữ liệu. Thời gian chờ khóa SQLite không phải cơ chế bảo đảm an toàn nhiều máy. Muốn vận hành nhiều người ghi đồng thời cần dịch vụ trung tâm quản lý truy cập, không chỉ chia sẻ tệp SQLite.
+- Dữ liệu đang ở chế độ WAL bị từ chối khi mở theo cách này. Nhờ người quản trị chuyển sang journal DELETE tại máy chủ sau khi đóng tất cả phiên; không tự xóa các tệp WAL/SHM.
+
+Trong nơi lưu: `customers.sqlite3` chứa hồ sơ và liên kết ảnh; `images/` chứa ảnh đặt tên ngẫu nhiên; `print-preview/` chứa bản xem trước in nếu có. Không đổi tên hoặc xóa riêng ảnh. Khi dùng thư mục chia sẻ, các tệp này được đọc/ghi qua mạng LAN; không có dịch vụ máy chủ điều phối ghi đồng thời.
 
 Hồ sơ cũ được bổ sung cột SQLite `address` với mặc định trống khi mở ứng dụng; migration chỉ thêm cột nếu chưa có, giữ nguyên các trường cũ và ảnh.
 
 ## Sao lưu và bảo mật
-- Đóng ứng dụng rồi sao chép **toàn bộ thư mục đang hiển thị ở Nơi lưu** sang nơi an toàn. Để khôi phục, đóng ứng dụng và thay nội dung nơi lưu bằng bản sao lưu đầy đủ. Giữ lại bản hiện tại trước khi thay. Không chạy nhiều phiên ứng dụng khi chuyển nơi lưu.
-- Đây là bản dùng cục bộ, **chưa có mật khẩu ứng dụng hoặc mã hóa dữ liệu**. Người có quyền đọc thư mục có thể đọc hồ sơ và ảnh.
+- Đóng ứng dụng **trên tất cả máy đang dùng nơi lưu đó**, rồi sao chép **toàn bộ thư mục đang hiển thị ở Nơi lưu** sang nơi an toàn, độc lập với máy chủ/ổ đĩa gốc. Sao lưu thường xuyên và kiểm tra khả năng khôi phục. Để khôi phục, đóng tất cả phiên và thay nội dung nơi lưu bằng bản sao lưu đầy đủ, hoặc dùng **Mở dữ liệu có sẵn** để mở thư mục đã khôi phục. Giữ lại bản hiện tại trước khi thay. Không chạy nhiều phiên ứng dụng khi chuyển nơi lưu.
+- Ứng dụng **chưa có mật khẩu ứng dụng hoặc mã hóa dữ liệu**. Người có quyền đọc thư mục cục bộ/chia sẻ có thể đọc hồ sơ và ảnh; giới hạn quyền chia sẻ SMB cho đúng người dùng.
 - Chỉ lưu ảnh khi có quyền / sự đồng ý cần thiết. Bảo vệ tài khoản Windows, hạn chế quyền truy cập, cân nhắc BitLocker. Không đưa data lên Git hoặc thư mục công khai.
 - Không thiết kế cho nhiều máy cùng ghi dữ liệu qua ổ mạng. Cột **Thao tác** có **Chi tiết / Sửa / Xóa**. Chi tiết mở modal hiển thị tên, SĐT, CCCD, mã hồ sơ, thời gian cập nhật UTC, địa chỉ và ghi chú đầy đủ (xuống dòng, chỉ đọc, có thanh cuộn) và danh sách tất cả ảnh (chọn từng ảnh để xem hoặc mở ảnh gốc). Nút Sửa đưa hồ sơ vào form bên phải. Xóa yêu cầu xác nhận, xóa vĩnh viễn hồ sơ cùng ảnh; nếu tệp ảnh không xóa được, ứng dụng cảnh báo các đường dẫn còn lại. Nên sao lưu trước khi xóa.
 

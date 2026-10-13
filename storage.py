@@ -1,4 +1,4 @@
-"""Local storage selection: copy first, validate, then atomically remember it."""
+"""Open existing storage in place, or copy to an empty local destination."""
 import json
 import os
 from pathlib import Path
@@ -7,12 +7,31 @@ import sqlite3
 import tempfile
 
 
+BUSY_TIMEOUT_MS = 3000
+
+
+def database_uri(database, mode):
+    """SQLite accepts UNC in the path, not a non-local URI authority."""
+    from urllib.parse import quote
+    path = Path(database).absolute()
+    text = path.as_posix()
+    uri = 'file://' + quote(text, safe='/:') if text.startswith('//') else path.as_uri()
+    return uri + '?mode=' + mode
+
+
+def connect_database(database, mode='rw'):
+    connection = sqlite3.connect(database_uri(database, mode), uri=True,
+                                 timeout=BUSY_TIMEOUT_MS / 1000)
+    connection.execute(f'PRAGMA busy_timeout={BUSY_TIMEOUT_MS}')
+    return connection
+
+
 def validate_store(directory):
     directory = Path(directory)
     database = directory / 'customers.sqlite3'
     if not directory.is_dir() or not database.is_file() or not (directory / 'images').is_dir():
         raise ValueError(f'Không tìm thấy đầy đủ dữ liệu tại: {directory}. Hãy kết nối lại ổ đĩa / khôi phục thư mục; không tạo dữ liệu trống.')
-    connection = sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True)
+    connection = connect_database(database, 'ro')
     try:
         if connection.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
             raise ValueError('Cơ sở dữ liệu không toàn vẹn.')
@@ -27,6 +46,48 @@ def validate_store(directory):
         connection.close()
 
 
+def open_existing(directory, config_path=None):
+    """Open in place, including UNC/mapped shares; never copy or create a DB."""
+    try:
+        return _open_existing(directory, config_path)
+    except sqlite3.OperationalError as exc:
+        detail = str(exc).lower()
+        if 'locked' in detail or 'busy' in detail:
+            message = 'Dữ liệu đang bận hoặc bị khóa. Hãy đóng thao tác ghi trên máy khác rồi thử lại; không chỉnh sửa đồng thời.'
+        else:
+            message = 'Không mở được dữ liệu. Kiểm tra kết nối ổ đĩa / mạng và quyền truy cập thư mục, rồi thử lại.'
+        raise sqlite3.OperationalError(f'{message}\nChi tiết: {exc}') from exc
+
+
+def _open_existing(directory, config_path=None):
+    from app import Store
+    raw = str(directory)
+    if '://' in raw or not Path(directory).is_absolute():
+        raise ValueError('Chọn đường dẫn thư mục tuyệt đối, không dùng URL.')
+    target = Path(directory).absolute()
+    validate_store(target)
+    candidate = Store(target, existing=True)
+    remembered = False
+    original = None
+    try:
+        candidate.search_page()  # Verify actual query path before remembering it.
+        if config_path is not None:
+            config_path = Path(config_path)
+            original = config_path.read_bytes() if config_path.exists() else None
+            save_config(config_path, target)
+            remembered = True
+        candidate.db.commit()
+        return candidate
+    except Exception:
+        candidate.close()  # Rolls back an uncommitted legacy address migration.
+        if remembered:
+            if original is None:
+                config_path.unlink()
+            else:
+                write_config_bytes(config_path, original)
+        raise
+
+
 def open_store(base, config_path=None):
     from app import Store
     base = Path(base)
@@ -37,19 +98,22 @@ def open_store(base, config_path=None):
         value = json.loads(config_path.read_text(encoding='utf-8'))['data_directory']
         if not isinstance(value, str) or not Path(value).is_absolute():
             raise ValueError('Đường dẫn dữ liệu phải là thư mục tuyệt đối.')
-        directory = Path(value)
-        validate_store(directory)
-        return Store(directory)
+        return open_existing(Path(value))
     except Exception as exc:
         raise ValueError(f'Không mở được nơi lưu đã chọn ({config_path}): {exc}') from exc
 
 
 def save_config(config_path, directory):
+    payload = json.dumps({'data_directory': str(directory)}, ensure_ascii=False, indent=2)
+    write_config_bytes(config_path, payload.encode('utf-8'))
+
+
+def write_config_bytes(config_path, payload):
     config_path = Path(config_path)
     descriptor, temporary = tempfile.mkstemp(prefix='.storage-', suffix='.tmp', dir=config_path.parent)
     try:
-        with os.fdopen(descriptor, 'w', encoding='utf-8') as output:
-            json.dump({'data_directory': str(directory)}, output, ensure_ascii=False, indent=2)
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(payload)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, config_path)

@@ -16,13 +16,25 @@ def normalize(value):
 
 
 class Store:
-    def __init__(self, directory):
+    def __init__(self, directory, *, existing=False):
+        from storage import connect_database
         self.root = Path(directory)
-        (self.root / 'images').mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.root / 'customers.sqlite3')
+        if not existing:
+            (self.root / 'images').mkdir(parents=True, exist_ok=True)
+        self.db = connect_database(self.root / 'customers.sqlite3', 'rw' if existing else 'rwc')
+        try:
+            self._initialize(existing)
+        except Exception:
+            self.db.close()
+            raise
+
+    def _initialize(self, existing):
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA foreign_keys=ON')
-        self.db.executescript('''
+        if existing and self.db.execute('PRAGMA journal_mode').fetchone()[0] == 'wal':
+            raise ValueError('Dữ liệu đang dùng WAL. Hãy đóng các ứng dụng và chuyển sang journal DELETE tại máy chủ trước khi mở qua mạng.')
+        if not existing:
+            self.db.executescript('''
             CREATE TABLE IF NOT EXISTS customers (
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL,
                 cccd TEXT NOT NULL, notes TEXT NOT NULL, search_text TEXT NOT NULL,
@@ -33,10 +45,13 @@ class Store:
         ''')
 
         # Keep the old column order and all existing rows/attachments intact.
-        with self.db:
-            columns = {row['name'] for row in self.db.execute('PRAGMA table_info(customers)')}
-            if 'address' not in columns:
-                self.db.execute("ALTER TABLE customers ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+        columns = {row['name'] for row in self.db.execute('PRAGMA table_info(customers)')}
+        if 'address' not in columns:
+            # Existing-folder activation commits this only after config succeeds.
+            self.db.execute('BEGIN IMMEDIATE')
+            self.db.execute("ALTER TABLE customers ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+            if not existing:
+                self.db.commit()
 
     def save(self, customer_id, name, phone, cccd, notes, photos=(), *, address=''):
         import re
@@ -234,6 +249,41 @@ class App:
         self._paste_directory = None
         self.config_path = Path(config_path) if config_path is not None else BASE / 'storage.json'
         build_app(self, root, store)
+
+    def open_existing_storage(self):
+        if not self.can_leave():
+            return
+        destination = filedialog.askdirectory(parent=self.root,
+                title='Mở thư mục có customers.sqlite3 và images (hỗ trợ ổ mạng)',
+                mustexist=True)
+        if not destination:
+            return
+        if Path(destination).absolute() == self.store.root.absolute():
+            self.status.set('Đây là nơi lưu dữ liệu hiện tại; không có thay đổi.')
+            return
+        if not messagebox.askyesno('Mở dữ liệu có sẵn',
+                f'Dùng trực tiếp dữ liệu tại:\n{destination}\n\n'
+                'Không sao chép, không ghi đè bằng dữ liệu hiện tại.\n'
+                'SQLite qua SMB không bảo đảm an toàn khi nhiều máy cùng ghi. '
+                'Không chỉnh sửa đồng thời; sao lưu thường xuyên và giữ kết nối mạng ổn định.\n\nTiếp tục?',
+                icon='warning', default='no', parent=self.root):
+            return
+        try:
+            from storage import open_existing
+            replacement = open_existing(destination, self.config_path)
+        except Exception as exc:
+            messagebox.showerror('Không mở được dữ liệu có sẵn', str(exc), parent=self.root)
+            return
+        previous = self.store
+        self.store = replacement
+        previous.close()
+        self.storage_path.set(str(self.store.root.absolute()))
+        self.dirty = False
+        self.new_customer()
+        self.page = 1
+        self.query.set('')
+        self.refresh()
+        self.status.set('Đã mở dữ liệu có sẵn • Không sửa đồng thời trên nhiều máy; nhớ sao lưu.')
 
     def choose_storage(self):
         if not self.can_leave():
