@@ -32,16 +32,16 @@ body{margin:0;background:#edf4fb;font:15px "Segoe UI",sans-serif;color:#193657}
 header{padding:20px;text-align:center}button{background:#1677ee;color:white;border:0;border-radius:8px;padding:12px 25px;font:inherit;cursor:pointer}
 p{line-height:1.6}
 .sheet{box-sizing:content-box;background:white;margin:0 auto 24px;padding:10mm;width:190mm;height:276mm;display:flex;flex-direction:column;gap:6mm}
-:root{--photo-width:85.6mm;--photo-height:54mm}
-img{display:block;width:85.6mm;height:54mm;width:var(--photo-width);height:var(--photo-height);min-height:0;flex:0 0 var(--photo-height);object-fit:contain;align-self:center}
+:root{--photo-width:180mm;--photo-height:80mm}
+img{display:block;width:180mm;height:80mm;width:var(--photo-width);height:var(--photo-height);min-height:0;flex:0 0 var(--photo-height);object-fit:contain;align-self:center}
 .controls{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin:12px auto}
 .controls input{width:75px;padding:7px;font:inherit}
 @page{size:A4 portrait;margin:10mm}
 @media print{header{display:none}body{background:white}.sheet{margin:0;padding:0;break-inside:avoid;break-after:page}.sheet:last-child{break-after:auto}}
 </style><header><h2>In ảnh khách hàng</h2>
 <p><strong>''' + count + '''</strong> · 2 ảnh mỗi trang, xếp trên / dưới.</p>
-<div class="controls"><label>Rộng (mm) <input id="photo-width" type="number" min="30" max="180" step="0.1" value="85.6"></label>
-<label>Cao (mm) <input id="photo-height" type="number" min="20" max="125" step="0.1" value="54"></label>
+<div class="controls"><label>Rộng (mm) <input id="photo-width" type="number" min="30" max="180" step="0.1" value="180"></label>
+<label>Cao (mm) <input id="photo-height" type="number" min="20" max="125" step="0.1" value="80"></label>
 <button type="button" onclick="window.print()">Chọn máy in / In ảnh</button></div></header>
 <main>''' + sheets + '''</main><script>
 for (const [id, property] of [['photo-width', '--photo-width'], ['photo-height', '--photo-height']]) {
