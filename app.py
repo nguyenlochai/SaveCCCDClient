@@ -52,6 +52,16 @@ class Store:
             self.db.execute("ALTER TABLE customers ADD COLUMN address TEXT NOT NULL DEFAULT ''")
             if not existing:
                 self.db.commit()
+        if not existing and not self.phone_conflicts():
+            # Reopening a legacy local store must not fail on old duplicates.
+            self.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_customers_phone_nonblank '
+                            "ON customers(phone) WHERE phone <> ''")
+
+    def phone_conflicts(self):
+        """Report legacy collisions without changing customer rows or photos."""
+        return [tuple(row) for row in self.db.execute(
+            "SELECT phone, COUNT(*) FROM customers WHERE phone <> '' "
+            'GROUP BY phone HAVING COUNT(*) > 1 ORDER BY phone')]
 
     def rotate_image(self, customer_id, image_id):
         """Atomically replace one owned saved photo with its clockwise rotation."""
@@ -83,17 +93,34 @@ class Store:
             raise ValueError('SĐT phải có 9–15 chữ số, có thể bắt đầu bằng +.')
         if cccd and not re.fullmatch(r'[0-9]{12}', cccd):
             raise ValueError('CCCD phải gồm đúng 12 chữ số.')
-        if cccd and self.db.execute('SELECT id FROM customers WHERE cccd=? AND id<>?', (cccd, customer_id or '')).fetchone():
-            raise ValueError('CCCD này đã tồn tại. Hãy tìm và sửa khách hàng cũ.')
         customer_id = customer_id or uuid.uuid4().hex
         copied = []
         try:
+            # Acquire the writer lock before checking. Even when a legacy database
+            # cannot yet have a unique index, two updated clients cannot pass
+            # the same check concurrently. Older clients must also be upgraded.
+            if not self.db.in_transaction:
+                self.db.execute('BEGIN IMMEDIATE')
             with self.db:
+                previous = self.db.execute('SELECT phone FROM customers WHERE id=?',
+                                           (customer_id,)).fetchone()
+                if phone and (previous is None or previous['phone'] != phone) and self.db.execute(
+                        'SELECT id FROM customers WHERE phone=? AND id<>?',
+                        (phone, customer_id)).fetchone():
+                    raise ValueError('SĐT này đã tồn tại. Hãy tìm và sửa khách hàng cũ.')
+                if cccd and self.db.execute('SELECT id FROM customers WHERE cccd=? AND id<>?',
+                                            (cccd, customer_id)).fetchone():
+                    raise ValueError('CCCD này đã tồn tại. Hãy tìm và sửa khách hàng cũ.')
                 self.db.execute('''INSERT INTO customers(id,name,phone,cccd,notes,search_text,address)
                     VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,phone=excluded.phone,cccd=excluded.cccd,
                     notes=excluded.notes,search_text=excluded.search_text,address=excluded.address,updated=CURRENT_TIMESTAMP''',
                     (customer_id, name, phone, cccd, notes, normalize(f'{name} {phone} {cccd}'), address))
+                # Legacy collisions remain untouched. Repair them by editing one
+                # record at a time; install the DB constraint once none remain.
+                if not self.phone_conflicts():
+                    self.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_customers_phone_nonblank '
+                                    "ON customers(phone) WHERE phone <> ''")
                 for source in photos:
                     source = Path(source)
                     with Image.open(source) as image:
